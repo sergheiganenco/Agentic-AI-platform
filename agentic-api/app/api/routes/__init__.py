@@ -1,0 +1,1 @@
+from .scan_api import router as scan_api_router

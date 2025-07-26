@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+sqlalchemy
+psycopg2
+pymongo
+celery
+redis
+python-dotenv
+passlib[bcrypt]
+python-jose
+pydantic
+python-multipart
