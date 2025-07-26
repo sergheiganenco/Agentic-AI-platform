@@ -1,0 +1,11 @@
+# Ignore backups or cache
+*.bak
+*.tmp
+*.swp
+
+# Ignore generated files
+*.pdf
+*.docx
+
+# Optional: Visual artifacts
+.DS_Store
