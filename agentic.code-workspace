@@ -1,0 +1,16 @@
+{
+	"folders": [
+		{
+			"path": "agentic-api"
+		},
+		{
+			"path": "agentic-core"
+		},
+		{
+			"path": "agentic-docs"
+		},
+		{
+			"path": "agentic-ui"
+		}
+	]
+}
