@@ -203,9 +203,9 @@ const ScanWizard: React.FC = () => {
             <Button
               variant="contained"
               sx={{ mt: 3, minWidth: 200 }}
-              onClick={() => navigate("/dashboard/data-sources")}
+              onClick={() => navigate("/scan-history")}
             >
-              Back to Data Sources
+              Back to Scan History 
             </Button>
           </Box>
         );

@@ -1,11 +1,14 @@
 import React, { useEffect, useState } from "react";
 import {
   Box, Typography, List, ListItemButton, ListItemText,
-  CircularProgress, Alert, Checkbox, Stack, Button
+  CircularProgress, Alert, Checkbox, Stack, Button, Pagination
 } from "@mui/material";
 import { fetchArtifacts } from "../../api/scans";
 import type { DataSource, Artifact, ArtifactApiResponse } from "../../types/scans";
 
+const ARTIFACTS_PER_PAGE = 15;
+
+// Always returns Artifact[] and uses both parameters.
 function normalizeArtifacts(data: ArtifactApiResponse, sourceType: string): Artifact[] {
   if (Array.isArray(data)) {
     if (data.length > 0 && typeof data[0] === "object" && data[0] !== null && "name" in data[0]) {
@@ -67,6 +70,7 @@ const ArtifactSelect: React.FC<ArtifactSelectProps> = ({
   const [artifactList, setArtifactList] = useState<Artifact[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     if (!dataSource || !dbName) return;
@@ -75,10 +79,20 @@ const ArtifactSelect: React.FC<ArtifactSelectProps> = ({
     const type = (dataSource.type || "").toLowerCase();
     const artifactType = (type === "mongodb" || type === "mongo") ? "collections" : "tables";
     fetchArtifacts(dataSource, dbName, artifactType)
-      .then((data: ArtifactApiResponse) => setArtifactList(normalizeArtifacts(data, type)))
+      .then((data: ArtifactApiResponse) => {
+        setArtifactList(normalizeArtifacts(data, type));
+        setPage(1); // reset pagination on data change
+      })
       .catch(() => setError("Could not fetch artifacts"))
       .finally(() => setLoading(false));
   }, [dataSource, dbName]);
+
+  // Pagination logic
+  const totalPages = Math.ceil(artifactList.length / ARTIFACTS_PER_PAGE);
+  const paginatedArtifacts = artifactList.slice(
+    (page - 1) * ARTIFACTS_PER_PAGE,
+    page * ARTIFACTS_PER_PAGE
+  );
 
   if (loading)
     return (
@@ -96,45 +110,55 @@ const ArtifactSelect: React.FC<ArtifactSelectProps> = ({
       {artifactList.length === 0 ? (
         <Typography>No artifacts found for this schema/database.</Typography>
       ) : (
-        <List>
-          {artifactList.map((art) => (
-            <ListItemButton
-              key={art.name}
-              selected={value.includes(art.name)}
-              onClick={() => {
-                if (value.includes(art.name)) {
-                  onChange(value.filter((v) => v !== art.name));
-                } else {
-                  onChange([...value, art.name]);
-                }
-              }}
-              sx={{
-                mb: 1,
-                borderRadius: 2,
-                border: value.includes(art.name)
-                  ? "2px solid #6c2bd7"
-                  : "1px solid #e0e0e0",
-                background: value.includes(art.name) ? "#f5f1ff" : "#fff",
-                "&:hover": { background: "#f3f0fa" },
-                transition: "all 0.15s",
-              }}
-            >
-              <Checkbox
-                checked={value.includes(art.name)}
-                tabIndex={-1}
-                disableRipple
-                sx={{ color: "#6c2bd7" }}
-              />
-              <ListItemText
-                primary={art.name}
-                secondary={art.row_count !== undefined ? `Rows: ${art.row_count}` : undefined}
-                primaryTypographyProps={{ fontWeight: 700 }}
-              />
-            </ListItemButton>
-          ))}
-        </List>
+        <>
+          <List>
+            {paginatedArtifacts.map((art) => (
+              <ListItemButton
+                key={art.name}
+                selected={value.includes(art.name)}
+                onClick={() => {
+                  if (value.includes(art.name)) {
+                    onChange(value.filter((v) => v !== art.name));
+                  } else {
+                    onChange([...value, art.name]);
+                  }
+                }}
+                sx={{
+                  mb: 1,
+                  borderRadius: 2,
+                  border: value.includes(art.name)
+                    ? "2px solid #6c2bd7"
+                    : "1px solid #e0e0e0",
+                  background: value.includes(art.name) ? "#f5f1ff" : "#fff",
+                  "&:hover": { background: "#f3f0fa" },
+                  transition: "all 0.15s",
+                }}
+              >
+                <Checkbox
+                  checked={value.includes(art.name)}
+                  tabIndex={-1}
+                  disableRipple
+                  sx={{ color: "#6c2bd7" }}
+                />
+                <ListItemText
+                  primary={art.name}
+                  secondary={art.row_count !== undefined ? `Rows: ${art.row_count}` : undefined}
+                  primaryTypographyProps={{ fontWeight: 700 }}
+                />
+              </ListItemButton>
+            ))}
+          </List>
+          <Box mt={2} display="flex" justifyContent="center">
+            <Pagination
+              count={totalPages}
+              page={page}
+              onChange={(_, v) => setPage(v)}
+              size="small"
+              color="primary"
+            />
+          </Box>
+        </>
       )}
-      {/* -- Inline Actions Row -- */}
       <Stack direction="row" spacing={2} mt={2} alignItems="center" justifyContent="center">
         {showBack && (
           <Button variant="outlined" onClick={onBack}>
