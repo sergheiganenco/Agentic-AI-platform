@@ -86,7 +86,7 @@ const ScanResultTable: React.FC<ScanResultTableProps> = ({ artifacts, artifactTy
   const [visibleColumns, setVisibleColumns] = useState<ColumnKey[]>(dynamicColumns.map(col => col.key));
   React.useEffect(() => {
     setVisibleColumns(dynamicColumns.map(col => col.key));
-  }, [artifacts]); // Reset on new data
+  }, [artifacts,dynamicColumns]); // Reset on new data
 
   // Filtering and sorting
   const filtered = useMemo(

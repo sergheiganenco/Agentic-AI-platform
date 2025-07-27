@@ -1,11 +1,11 @@
 import type { ScanConfig, DataSource, Database,  ArtifactApiResponse } from '../types/scans';
+import api from './client';
 
 // Dummy implementations below—replace base URLs and implement real error handling as needed.
 
 export async function fetchDataSources(): Promise<DataSource[]> {
-  const res = await fetch('/api/data-sources');
-  if (!res.ok) throw new Error('Failed to fetch data sources');
-  return await res.json();
+  const res = await api.get('/api/data-sources');
+  return res.data;
 }
 
 export async function fetchDatabases(dataSourceId: number): Promise<Database[]> {

@@ -23,9 +23,14 @@ const ResetPassword: React.FC = () => {
       await api.post('/users/reset-password', { token, new_password: newPassword });
       setMessage('Password reset successful! You can now log in.');
       setTimeout(() => navigate('/login'), 2000);
-    } catch (err: any) {
-      setError(err?.response?.data?.detail || 'Reset failed');
+    } catch (err: unknown) {
+      let msg = "An unexpected error occurred";
+      if (err instanceof Error) {
+        msg = err.message;
+      }
+      setError(msg);
     }
+
   };
 
   return (

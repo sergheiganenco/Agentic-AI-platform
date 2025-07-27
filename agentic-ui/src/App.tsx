@@ -35,7 +35,8 @@ const App: React.FC = () => (
         <Route path="/admin/users" element={<ProtectedRoute><AdminUserList /></ProtectedRoute>} />
         <Route path="/dashboard/data-sources" element={<ProtectedRoute><AdminDataSources /></ProtectedRoute>} />
         <Route path="/scan-wizard" element={<ProtectedRoute><ScanWizard /></ProtectedRoute>} />
-        <Route path="/scan-history" element={<ScanHistory />} />
+        <Route path="/scan-history" element={<ProtectedRoute><ScanHistory /></ProtectedRoute>} />
+
         
 
       </Route>

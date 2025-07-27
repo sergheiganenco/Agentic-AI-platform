@@ -283,7 +283,7 @@ const ScanWizard: React.FC = () => {
           )}
           {!submitting && renderStep()}
           <Box mt={4} display="flex" justifyContent="flex-end">
-            <Button color="secondary" onClick={handleCancel}>
+            <Button color="secondary" onClick={handleCancel} disabled={submitting}>
               Cancel
             </Button>
           </Box>

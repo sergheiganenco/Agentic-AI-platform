@@ -54,7 +54,7 @@ export function ScanHistory() {
   return (
     <div style={{ padding: 24 }}>
       <h2>Scan History</h2>
-      {loading && <div>Loading...</div>}
+      {loading && <div>CircularProgress</div>}
       {error && <div style={{ color: "red" }}>{error}</div>}
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead>

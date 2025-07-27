@@ -9,6 +9,7 @@ from app.api.dependencies import get_current_user
 from app.schemas.scan_job import ScanJobOut, ScanResultOut
 from app.mongo_client import get_metadata_result  # You need to implement this!
 from app.models.scan_job import ScanJob, ScanJobResult
+from app.models.data_source import DataSource  # Assuming you have a DataSource model
 
 router = APIRouter()
 
@@ -40,11 +41,14 @@ def get_scan_job_result(job_id: int, db: Session = Depends(get_db), current_user
     
     # Get the ScanJob for context (data_source, etc.)
     job = db.query(ScanJob).filter(ScanJob.id == job_id).first()
+    data_source = db.query(DataSource).filter(DataSource.id == job.data_source_id).first() if job else None
+
     return {
         "scan_job_id": job_id,
-        "metadata_json": result.metadata_json,  # <-- Fix: matches frontend type!
-        "data_source": getattr(job, "data_source_id", None),  # or name if you prefer
+        "metadata_json": result.metadata_json,
+        "data_source": data_source.name if data_source else None,
         "scan_timestamp": result.created_at.isoformat(),
-        "databases": [],  # (Optional) If you want to implement, can include database info here
+        "databases": [],
     }
+
 

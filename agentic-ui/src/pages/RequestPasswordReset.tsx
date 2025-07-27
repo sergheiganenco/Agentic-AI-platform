@@ -14,9 +14,14 @@ const RequestPasswordReset: React.FC = () => {
     try {
       await api.post('/users/request-password-reset', { email });
       setMessage('If that email is registered, you’ll receive a reset email.');
-    } catch (err: any) {
-      setError(err?.response?.data?.detail || 'Request failed');
+    } catch (err: unknown) {
+      let msg = "An unexpected error occurred";
+      if (err instanceof Error) {
+        msg = err.message;
+      }
+      setError(msg);
     }
+
   };
 
   return (
