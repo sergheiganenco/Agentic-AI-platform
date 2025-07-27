@@ -85,3 +85,23 @@ export interface ScanJobResult {
     [artifact: string]: unknown;
   }>;
 }
+
+export type ScanWizardStep =
+  | 'ArtifactSelect'
+  | 'DataSourceSelect'
+  | 'DatabaseSelect'
+  | 'ScheduleSelect'
+  | 'ConfirmScan';
+
+export interface ScanWizardState {
+  artifact?: string;
+  dataSource?: string;
+  database?: string;
+  schedule?: string;
+  // Add any other relevant fields here
+}
+
+export interface ScanWizardError {
+  step: ScanWizardStep;
+  message: string;
+}

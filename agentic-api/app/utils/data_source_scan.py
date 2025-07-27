@@ -1,5 +1,7 @@
 # data_source_scan.py
-from app.utils.ds_normalize import normalize_type
+from app.utils.ds_normalize import normalize_type, replace_db_in_conn_string
+from sqlalchemy import create_engine, inspect
+import json, logging
 
 def test_data_source_by_type(ds_type: str, connection_string: str):
     norm_type = normalize_type(ds_type)
@@ -52,51 +54,27 @@ def scan_data_source_metadata_by_type(
         raise Exception(f"Unknown data source type: {ds_type} (normalized: {norm_type})")
 
 
-
-def scan_sql_metadata(connection_string: str, db_names=None, artifact_types=None, **kwargs):
+def scan_sql_metadata(connection_string, db_names=None, artifact_types=None):
     from sqlalchemy import create_engine, inspect
-
+    import json
+    engine = create_engine(connection_string)
+    inspector = inspect(engine)
+    tables = inspector.get_table_names()
     all_metadata = []
-    dbs = db_names or [None]  # Fallback if db_names is None
-    for db in dbs:
-        # Construct connection string per-db, if needed
-        conn_str = connection_string
-        if db:  # Replace db name in conn_str; implementation depends on your format!
-            conn_str = replace_db_in_conn_string(connection_string, db)
-        engine = create_engine(conn_str)
-        inspector = inspect(engine)
-
-        # Extract just tables for this DB
-        table_names = [
-            a.split('.', 1)[-1]
-            for a in (artifact_types or [])
-            if (not db or a.startswith(f"{db}."))
-        ]
-        # If table_names is empty (user did not select anything), skip
-        if not table_names:
-            continue
-
-        tables = inspector.get_table_names()
-        tables = [t for t in tables if t in table_names]
-        objects = []
-        for table_name in tables:
-            columns = inspector.get_columns(table_name)
-            pk_info = inspector.get_pk_constraint(table_name)
-            pk_columns = set(pk_info.get("constrained_columns", []))
-            objects.append({
-                "name": table_name,
-                "fields": [
-                    {
-                        "name": col["name"],
-                        "types": [str(col["type"])],
-                        "nullable": col.get("nullable", True),
-                        "primary_key": col["name"] in pk_columns
-                    }
-                    for col in columns
-                ]
+    for table in tables:
+        columns = inspector.get_columns(table)
+        fields = []
+        for col in columns:
+            fields.append({
+                "name": col["name"],
+                "types": [str(col["type"])],
+                "nullable": col.get("nullable", True),
+                "primary_key": col.get("primary_key", False),
             })
-        all_metadata.append({"db": db, "objects": objects})
-    return {"source_type": "sql", "databases": all_metadata}
+        all_metadata.append({"name": table, "fields": fields})
+    print("DEBUG: FINAL METADATA:", json.dumps({"source_type": "sql", "objects": all_metadata}, indent=2))
+    return {"source_type": "sql", "objects": all_metadata}
+
 
 
 
@@ -104,6 +82,7 @@ def scan_sql_metadata(connection_string: str, db_names=None, artifact_types=None
 def scan_mongo_metadata(connection_string: str, db_names=None, artifact_types=None, sample_size=100, **kwargs):
     """
     Scans MongoDB collections and fields across multiple databases.
+    Returns: {"source_type": "mongo", "objects": [...]}
     """
     from pymongo import MongoClient
 
@@ -123,19 +102,18 @@ def scan_mongo_metadata(connection_string: str, db_names=None, artifact_types=No
             except Exception:
                 db_names = ["test"]
 
-    all_metadata = []
+    all_objects = []
     for db_name in db_names:
         db = client[db_name]
         collections = db.list_collection_names()
+        # Make artifact_types filter case-insensitive
         if artifact_types:
-            collections = [c for c in collections if c in artifact_types]
-        objects = []
+            artifact_set = set(a.lower() for a in artifact_types)
+            collections = [c for c in collections if c.lower() in artifact_set]
         for coll_name in collections:
             field_types = {}
             docs = db[coll_name].find({}, limit=sample_size)
-            found = False
             for doc in docs:
-                found = True
                 for k, v in doc.items():
                     t = type(v).__name__
                     field_types.setdefault(k, set()).add(t)
@@ -148,12 +126,10 @@ def scan_mongo_metadata(connection_string: str, db_names=None, artifact_types=No
                 }
                 for k, v in field_types.items()
             ]
-            objects.append({"name": coll_name, "fields": fields})
-            if not found:
-                objects.append({"name": coll_name, "fields": []})
-        all_metadata.append({"db": db_name, "objects": objects})
+            all_objects.append({"name": coll_name, "fields": fields})
 
-    return {"source_type": "mongo", "databases": all_metadata}
+    print(f"[DEBUG] all_objects: {all_objects}")
+    return {"source_type": "mongo", "objects": all_objects}
 
 
 def scan_file_metadata(file_path: str, **kwargs):
