@@ -53,27 +53,32 @@ def scan_data_source_metadata_by_type(
     else:
         raise Exception(f"Unknown data source type: {ds_type} (normalized: {norm_type})")
 
-
-def scan_sql_metadata(connection_string, db_names=None, artifact_types=None):
-    from sqlalchemy import create_engine, inspect
+def scan_sqlite_metadata(db_files):
+    # db_files: list of file paths
     import json
-    engine = create_engine(connection_string)
-    inspector = inspect(engine)
-    tables = inspector.get_table_names()
+    from sqlalchemy import create_engine, inspect
     all_metadata = []
-    for table in tables:
-        columns = inspector.get_columns(table)
-        fields = []
-        for col in columns:
-            fields.append({
-                "name": col["name"],
-                "types": [str(col["type"])],
-                "nullable": col.get("nullable", True),
-                "primary_key": col.get("primary_key", False),
+    for db_file in db_files:
+        engine = create_engine(f"sqlite:///{db_file}")
+        inspector = inspect(engine)
+        tables = inspector.get_table_names()
+        for table in tables:
+            columns = inspector.get_columns(table)
+            fields = []
+            for col in columns:
+                fields.append({
+                    "name": col["name"],
+                    "types": [str(col["type"])],
+                    "nullable": col.get("nullable", True),
+                    "primary_key": col.get("primary_key", False),
+                })
+            all_metadata.append({
+                "db_name": db_file,   # add DB file name!
+                "name": table,
+                "fields": fields
             })
-        all_metadata.append({"name": table, "fields": fields})
-    print("DEBUG: FINAL METADATA:", json.dumps({"source_type": "sql", "objects": all_metadata}, indent=2))
-    return {"source_type": "sql", "objects": all_metadata}
+    return {"source_type": "sqlite", "objects": all_metadata}
+
 
 
 

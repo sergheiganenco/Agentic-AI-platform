@@ -1,8 +1,11 @@
 # app/api/routes/scan_jobs.py
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 import json
+import csv
+import io
 from app.models import ScanJob
 from app.db.session import get_db
 from app.api.dependencies import get_current_user
@@ -52,3 +55,30 @@ def get_scan_job_result(job_id: int, db: Session = Depends(get_db), current_user
     }
 
 
+@router.get("/scan-jobs/{job_id}/export")
+def export_scan_job_csv(job_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    job = db.query(ScanJobResult).filter(ScanJobResult.scan_job_id == job_id).first()
+    if not job:
+        raise HTTPException(404, "Not found")
+    # Optional: Check job owner == current_user.id
+
+    # Assuming job.metadata_json is the result JSON
+    data = json.loads(job.metadata_json)
+    # Flatten for CSV (your logic may vary)
+    objects = data.get("objects") or []
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["table", "name", "type", "nullable", "primary_key", "row_count", "description"])
+    for obj in objects:
+        for field in obj.get("fields", []):
+            writer.writerow([
+                obj.get("name"),
+                field.get("name"),
+                ", ".join(field.get("types", [])),
+                field.get("nullable"),
+                field.get("primary_key"),
+                field.get("row_count"),
+                field.get("description"),
+            ])
+    output.seek(0)
+    return StreamingResponse(output, media_type="text/csv", headers={"Content-Disposition": f"attachment; filename=scan_job_{job_id}.csv"})

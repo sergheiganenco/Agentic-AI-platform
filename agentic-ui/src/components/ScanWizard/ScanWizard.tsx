@@ -86,8 +86,8 @@ const ScanWizard: React.FC = () => {
     try {
       const config: ScanConfig = {
         dataSourceId: dataSource!.id,
-        dbNames: dataSource?.type === "sqlite" ? [] : databases,
-        artifactTypes: dataSource?.type === "sqlite" ? ["tables"] : Object.values(artifactSelections).flat(),
+        dbNames: databases, // Always pass the array, even for SQLite (could be ['main'] or whatever applies)
+        artifactTypes: Object.values(artifactSelections).flat(), // Always send the real selected artifacts/tables
         scheduledTime: schedule.time,
         scheduledCron: schedule.cron,
       };

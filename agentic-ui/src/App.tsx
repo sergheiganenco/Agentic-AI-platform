@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
@@ -14,7 +15,7 @@ import UsersList from "./pages/UsersList";
 import AdminUserList from "./pages/AdminUserList";
 import AdminDataSources from "./pages/AdminDataSources";
 import ScanWizard from "./components/ScanWizard/ScanWizard";
-import { ScanHistory } from "./pages/ScanHistory";
+import ScanHistory from "./pages/ScanHistory";
 
 const App: React.FC = () => (
   <BrowserRouter>

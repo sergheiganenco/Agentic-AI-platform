@@ -1,9 +1,26 @@
 import React, { useEffect, useState } from "react";
+import {
+  Box,
+  Typography,
+  Paper,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Button,
+  CircularProgress,
+  Alert,
+  Pagination,
+} from "@mui/material";
 import type { ScanJob, ScanJobResult } from "../types/scans";
 import ScanResultTable from "./ScanResultTable";
 import { getArtifacts } from "../utils/scanHelpers";
 
-export function ScanHistory() {
+const ROWS_PER_PAGE = 5;
+
+const ScanHistory: React.FC = () => {
   const [jobs, setJobs] = useState<ScanJob[]>([]);
   const [result, setResult] = useState<ScanJobResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -11,8 +28,9 @@ export function ScanHistory() {
 
   // Pagination state
   const [page, setPage] = useState(1);
-  const rowsPerPage = 5;
-  const pagedJobs = jobs.slice((page - 1) * rowsPerPage, page * rowsPerPage);
+  useEffect(() => setPage(1), [jobs]);
+
+  const pagedJobs = jobs.slice((page - 1) * ROWS_PER_PAGE, page * ROWS_PER_PAGE);
 
   useEffect(() => {
     setLoading(true);
@@ -52,71 +70,101 @@ export function ScanHistory() {
   }
 
   return (
-    <div style={{ padding: 24 }}>
-      <h2>Scan History</h2>
-      {loading && <div>CircularProgress</div>}
-      {error && <div style={{ color: "red" }}>{error}</div>}
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Status</th>
-            <th>Data Source</th>
-            <th>DBs</th>
-            <th>Artifacts</th>
-            <th>Created</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {pagedJobs.map((job) => (
-            <tr key={job.id}>
-              <td>{job.id}</td>
-              <td>{job.status}</td>
-              <td>{job.data_source_id}</td>
-              <td>{job.db_names?.join(", ")}</td>
-              <td>{job.artifact_types?.join(", ")}</td>
-              <td>{job.created_at}</td>
-              <td>
-                <button onClick={() => viewResult(job.id)}>View Result</button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {/* Pagination */}
-      <div style={{ margin: "16px 0", textAlign: "center" }}>
-        {Array.from({ length: Math.ceil(jobs.length / rowsPerPage) }, (_, i) => (
-          <button
-            key={i}
-            onClick={() => setPage(i + 1)}
-            style={{
-              margin: "0 4px",
-              padding: "4px 10px",
-              background: i + 1 === page ? "#6549d5" : "#f2f2f2",
-              color: i + 1 === page ? "#fff" : "#444",
-              border: "none",
-              borderRadius: "4px",
-              cursor: "pointer"
-            }}
-          >
-            {i + 1}
-          </button>
-        ))}
-      </div>
+    <Box p={3}>
+      <Typography variant="h5" gutterBottom fontWeight={700}>
+        Scan History
+      </Typography>
+      {loading && (
+        <Box display="flex" justifyContent="center" my={3}>
+          <CircularProgress />
+        </Box>
+      )}
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
+      <Paper elevation={2} sx={{ mb: 3 }}>
+        <TableContainer>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>ID</TableCell>
+                <TableCell>Status</TableCell>
+                <TableCell>Data Source</TableCell>
+                <TableCell>DBs</TableCell>
+                <TableCell>Artifacts</TableCell>
+                <TableCell>Created</TableCell>
+                <TableCell>Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {pagedJobs.map((job) => (
+                <TableRow key={job.id}>
+                  <TableCell>{job.id}</TableCell>
+                  <TableCell>{job.status}</TableCell>
+                  <TableCell>{job.data_source_id}</TableCell>
+                  <TableCell>
+                    {job.db_names
+                      ? Array.isArray(job.db_names)
+                        ? job.db_names.join(", ")
+                        : job.db_names
+                      : ""}
+                  </TableCell>
+                  {/* Artifacts: Just show artifact types */}
+                  <TableCell>
+                    {job.artifact_types
+                      ? Array.isArray(job.artifact_types)
+                        ? job.artifact_types.join(", ")
+                        : job.artifact_types
+                      : ""}
+                  </TableCell>
+                  <TableCell>{job.created_at}</TableCell>
+                  <TableCell>
+                    <Button
+                      size="small"
+                      variant="contained"
+                      onClick={() => viewResult(job.id)}
+                    >
+                      View Result
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+        <Box my={2} display="flex" justifyContent="center">
+          <Pagination
+            count={Math.ceil(jobs.length / ROWS_PER_PAGE)}
+            page={page}
+            onChange={(_, val) => setPage(val)}
+            size="small"
+            color="primary"
+          />
+        </Box>
+      </Paper>
 
       {result && (
-        <div style={{ marginTop: 32, border: "1px solid #eee", borderRadius: 8, padding: 16 }}>
-          <h3>Scan Result (Job {result.scan_job_id})</h3>
+        <Paper sx={{ mt: 4, p: 2 }}>
+          <Typography variant="h6" gutterBottom>
+            Scan Result (Job {result.scan_job_id})
+          </Typography>
           <ScanResultTable
             artifacts={getArtifacts(result)}
             artifactType={getArtifactType(result)}
           />
-          <button style={{ marginTop: 16 }} onClick={() => setResult(null)}>
+          <Button
+            sx={{ mt: 2 }}
+            variant="outlined"
+            onClick={() => setResult(null)}
+          >
             Close
-          </button>
-        </div>
+          </Button>
+        </Paper>
       )}
-    </div>
+    </Box>
   );
-}
+};
+
+export default ScanHistory;
