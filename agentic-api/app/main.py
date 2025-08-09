@@ -23,6 +23,11 @@ from app.api.routes import data_sources
 from app.api.routes.scan_api import router as scan_api_router
 from app.api.routes.scan_jobs import router as scan_jobs_router
 
+from app.api.routes import agentic_ai
+
+
+
+
 # Create all tables
 Base.metadata.create_all(bind=engine)
 
@@ -63,6 +68,7 @@ app.include_router(source_types.router, prefix="/source-types", tags=["Source Ty
 app.include_router(data_sources.public_router)
 app.include_router(scan_api_router, prefix="/api")
 app.include_router(scan_jobs_router, prefix="/api", tags=["Scan Jobs"])
+app.include_router(agentic_ai.router, prefix="/agentic-ai", tags=["Agentic AI"])
 
 # Root endpoint
 @app.get("/")

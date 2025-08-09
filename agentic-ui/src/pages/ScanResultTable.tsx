@@ -13,6 +13,7 @@ import { exportTableToPdf } from "../utils/pdfConfig";
 // Column definitions
 const allColumns: { key: keyof Artifact, label: string }[] = [
   { key: "table", label: "Table/Collection" },
+  { key: "object_type", label: "Object Type" }, 
   { key: "name", label: "Column Name" },
   { key: "types", label: "Type(s)" },
   { key: "nullable", label: "Nullable" },
@@ -278,9 +279,14 @@ const handleExport = (): void => {
                     cellContent = row.types.map((t, i) => (
                       <Chip key={i} label={t as string} size="small" sx={{ mr: 0.5, mb: 0.25 }} />
                     ));
-                  } else {
-                    cellContent = row[col.key as keyof typeof row] ?? "";
-                  }
+                    } else if (col.key === "object_type") {
+                      cellContent = row.object_type
+                        ? <Chip label={row.object_type} size="small" color="secondary" />
+                        : "";
+                    } else {
+                      cellContent = row[col.key as keyof typeof row] ?? "";
+                    }
+
                   return <TableCell key={String(col.key)}>{cellContent}</TableCell>;
                 })}
               </TableRow>

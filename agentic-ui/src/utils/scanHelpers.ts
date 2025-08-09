@@ -1,113 +1,147 @@
-// src/helpers/scanHelpers.ts
-
 import type { ScanJobResult, Artifact } from "../types/scans";
 
-// Robust, type-safe artifact extractor for all backend shapes
+// Mongo-style object
+interface MongoObject {
+  name: string;
+  object_type?: string;
+  fields?: Artifact[];
+}
+
+// Type guards
+function isMongoWithFields(obj: unknown): obj is { objects: MongoObject[] } {
+  return (
+    typeof obj === "object" &&
+    obj !== null &&
+    "objects" in obj &&
+    Array.isArray((obj as { objects: unknown }).objects) &&
+    (
+      (obj as { objects: MongoObject[] }).objects.length === 0 ||
+      (
+        typeof (obj as { objects: MongoObject[] }).objects[0] === "object" &&
+        (obj as { objects: MongoObject[] }).objects[0] !== null &&
+        "fields" in (obj as { objects: MongoObject[] }).objects[0]
+      )
+    )
+  );
+}
+
+function isArtifactArray(obj: unknown): obj is Artifact[] {
+  // Flat array, not wrapped in { objects: ... }
+  return (
+    Array.isArray(obj) &&
+    (obj.length === 0 ||
+      (typeof obj[0] === "object" &&
+        obj[0] !== null &&
+        "name" in obj[0] &&
+        ("table" in obj[0] || "object_type" in obj[0])))
+  );
+}
+
+function isObjectArray(obj: unknown): obj is { objects: Artifact[] } {
+  // Handles { objects: Artifact[] } or { source_type, objects }
+  return (
+    typeof obj === "object" &&
+    obj !== null &&
+    "objects" in obj &&
+    Array.isArray((obj as { objects: unknown }).objects)
+  );
+}
+
+function isNamedArrayObj(obj: unknown): obj is Record<string, string[]> {
+  // Handles { tables: [...], views: [...], collections: [...] }
+  return (
+    typeof obj === "object" &&
+    obj !== null &&
+    (
+      "tables" in obj ||
+      "views" in obj ||
+      "collections" in obj
+    )
+  );
+}
+
+function safeParse(json: string): unknown {
+  try {
+    return JSON.parse(json);
+  } catch (err) {
+    console.error("Failed to parse metadata_json:", err);
+    return null;
+  }
+}
+
+/**
+ * Extract and flatten scan artifacts for table display.
+ * Supports all shapes from SQL, Mongo, and future backends.
+ */
 export function getArtifacts(result: ScanJobResult): Artifact[] {
   if (!result?.metadata_json) return [];
 
-  const meta: unknown =
-    typeof result.metadata_json === "string"
-      ? JSON.parse(result.metadata_json)
-      : result.metadata_json;
+  const meta: unknown = typeof result.metadata_json === "string"
+    ? safeParse(result.metadata_json)
+    : result.metadata_json;
 
-  // 1. Array of columns (with name)
-  if (
-    Array.isArray(meta) &&
-    meta.length > 0 &&
-    typeof meta[0] === "object" &&
-    meta[0] !== null &&
-    "name" in meta[0]
-  ) {
-    return (meta as Record<string, unknown>[]).map((col) => ({
-      ...col,
-      table: "",
-      name: String(col["name"]),
-    })) as Artifact[];
-  }
-
-  // 2. Array of names (table/collection names)
-  if (
-    Array.isArray(meta) &&
-    meta.length > 0 &&
-    typeof meta[0] === "string"
-  ) {
-    return (meta as string[]).map((table) => ({
-      table,
-      name: table,
-    }));
-  }
-
-  // 3. { objects: [ {name, fields: [...]}, ... ] }
-  if (
-    typeof meta === "object" &&
-    meta !== null &&
-    "objects" in meta &&
-    Array.isArray((meta as { objects: unknown }).objects)
-  ) {
-    const objects = (meta as { objects: Array<{ name: string; fields?: Record<string, unknown>[] }> }).objects;
-    const resultArr: Artifact[] = [];
-    objects.forEach((obj) => {
-      if (obj.fields && Array.isArray(obj.fields)) {
-        obj.fields.forEach((field: Record<string, unknown>) => {
-          resultArr.push({
+  // 1. Mongo style: { objects: [{ name, object_type, fields: [...] }, ...] }
+  if (isMongoWithFields(meta)) {
+    return meta.objects.flatMap(obj =>
+      (obj.fields && obj.fields.length > 0)
+        ? obj.fields.map(field => ({
             ...field,
             table: obj.name,
-            name: field.name,
-          } as Artifact);
-        });
-      } else {
-        resultArr.push({ table: obj.name, name: obj.name });
-      }
-    });
-    return resultArr;
+            object_type: obj.object_type ?? "collection",
+          }))
+        : [{
+            table: obj.name,
+            name: obj.name,
+            object_type: obj.object_type ?? "collection"
+          }]
+    );
   }
 
-  // 4. { table: [col, col], ... }
-  if (
-    typeof meta === "object" &&
-    meta !== null &&
-    Object.values(meta).some((v) => Array.isArray(v))
-  ) {
-    const resultArr: Artifact[] = [];
-    Object.entries(meta as Record<string, unknown>).forEach(([table, arr]) => {
-      if (Array.isArray(arr)) {
-        if (arr.length > 0 && typeof arr[0] === "object" && arr[0] !== null && "name" in arr[0]) {
-          (arr as Record<string, unknown>[]).forEach((col) => {
-            resultArr.push({
-              ...col,
-              table,
-              name: String(col["name"]),
-            } as Artifact);
-          });
-        } else if (arr.length > 0 && typeof arr[0] === "string") {
-          (arr as string[]).forEach((colName) => {
-            resultArr.push({ table, name: colName });
-          });
-        }
-      }
-    });
-    return resultArr;
+  // 2. Flat array (SQL, sometimes Mongo, legacy)
+  if (isArtifactArray(meta)) {
+    return meta;
   }
 
-  // 5. { tables: [], views: [], collections: [] }
-  if (
-    typeof meta === "object" &&
-    meta !== null &&
-    ("tables" in meta || "views" in meta || "collections" in meta)
-  ) {
-    const out: Artifact[] = [];
-    const obj = meta as Record<string, string[]>;
-    (["tables", "views", "collections"] as const).forEach((key) => {
-      if (obj[key]) {
-        obj[key].forEach((name: string) => {
-          out.push({ table: key, name });
-        });
-      }
-    });
-    return out;
+  // 3. { objects: Artifact[], ... } or { source_type, objects }
+  if (isObjectArray(meta)) {
+    const objects = meta.objects;
+    // If Mongo-style objects with fields, flatten
+    if (objects.length > 0 && "fields" in objects[0]) {
+      return (objects as MongoObject[]).flatMap(obj =>
+        (obj.fields && obj.fields.length > 0)
+          ? obj.fields.map(field => ({
+              ...field,
+              table: obj.name,
+              object_type: obj.object_type ?? "collection"
+            }))
+          : [{
+              table: obj.name,
+              name: obj.name,
+              object_type: obj.object_type ?? "collection"
+            }]
+      );
+    }
+    // Else, treat as a flat artifact array
+    return objects as Artifact[];
   }
 
-  // fallback
+  // 4. Named arrays (old SQL/Mongo): { tables: [...], views: [...], collections: [...] }
+  if (isNamedArrayObj(meta)) {
+    const arr: Artifact[] = [];
+    (["tables", "views", "collections"] as const).forEach(key => {
+      const items = meta[key];
+      if (Array.isArray(items)) {
+        arr.push(...items.map(name => ({
+          table: name,
+          name,
+          object_type: key.slice(0, -1) // table, view, collection
+        })));
+      }
+    });
+    if (arr.length > 0) return arr;
+  }
+
+  // 5. Unknown/unsupported shape
+  console.warn("getArtifacts: Unknown metadata_json shape", meta);
   return [];
 }

@@ -4,47 +4,10 @@ import {
   CircularProgress, Alert, Checkbox, Stack, Button, Pagination
 } from "@mui/material";
 import { fetchArtifacts } from "../../api/scans";
-import type { DataSource, Artifact, ArtifactApiResponse } from "../../types/scans";
+import type { DataSource, Artifact } from "../../types/scans";
+import { normalizeArtifacts } from "../../utils/normalizeArtifacts";
 
 const ARTIFACTS_PER_PAGE = 15;
-
-// Always returns Artifact[] and uses both parameters.
-function normalizeArtifacts(data: ArtifactApiResponse, sourceType: string): Artifact[] {
-  if (Array.isArray(data)) {
-    if (data.length > 0 && typeof data[0] === "object" && data[0] !== null && "name" in data[0]) {
-      return data as Artifact[];
-    }
-    return (data as string[]).map((name) => ({ name, table: name }));
-  }
-  const result: Artifact[] = [];
-  if (sourceType === "mongodb" || sourceType === "mongo") {
-    const arr = (data as Record<string, unknown>)["collections"];
-    if (Array.isArray(arr)) {
-      if (arr.length > 0 && typeof arr[0] === "object" && arr[0] !== null && "name" in arr[0]) {
-        result.push(...(arr as Artifact[]));
-      } else if (arr.length > 0 && typeof arr[0] === "string") {
-        result.push(...(arr as string[]).map((name) => ({ name, table: name })));
-      }
-    }
-    return result;
-  }
-  ["tables", "views"].forEach((key) => {
-    const arr = (data as Record<string, unknown>)[key];
-    if (Array.isArray(arr)) {
-      if (arr.length > 0 && typeof arr[0] === "object" && arr[0] !== null && "name" in arr[0]) {
-        result.push(...(arr as Artifact[]));
-      } else if (arr.length > 0 && typeof arr[0] === "string") {
-        result.push(...(arr as string[]).map((name) => ({ name, table: name })));
-      }
-    }
-  });
-  const seen = new Set<string>();
-  return result.filter((x) => {
-    if (seen.has(x.name)) return false;
-    seen.add(x.name);
-    return true;
-  });
-}
 
 interface ArtifactSelectProps {
   dataSource: DataSource;
@@ -76,15 +39,42 @@ const ArtifactSelect: React.FC<ArtifactSelectProps> = ({
     if (!dataSource || !dbName) return;
     setLoading(true);
     setError(null);
+
     const type = (dataSource.type || "").toLowerCase();
-    const artifactType = (type === "mongodb" || type === "mongo") ? "collections" : "tables";
-    fetchArtifacts(dataSource, dbName, artifactType)
-      .then((data: ArtifactApiResponse) => {
-        setArtifactList(normalizeArtifacts(data, type));
-        setPage(1); // reset pagination on data change
-      })
-      .catch(() => setError("Could not fetch artifacts"))
-      .finally(() => setLoading(false));
+
+    const fetchAll = async () => {
+      if (type === "mongodb" || type === "mongo") {
+        const artifacts = await fetchArtifacts(dataSource, dbName, "collections");
+        setArtifactList(normalizeArtifacts(artifacts, type));
+      } else {
+        const sqlTypes = ["tables", "views", "procedures", "functions"];
+        const results = await Promise.all(
+          sqlTypes.map((t) => fetchArtifacts(dataSource, dbName, t))
+        );
+        // Flatten, normalize and merge all
+        const merged = results.flatMap((artifacts, idx) =>
+          normalizeArtifacts(artifacts, sqlTypes[idx])
+        );
+        // Remove duplicates by name + type
+        const seen = new Set<string>();
+        const unique = merged.filter((art) => {
+          const key = art.name + "_" + (art.object_type || "");
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+        setArtifactList(unique);
+      }
+      setPage(1);
+      setLoading(false);
+    };
+
+    fetchAll().catch((err) => {
+      // eslint-disable-next-line no-console
+      console.error("Artifact fetch error", err);
+      setError("Could not fetch artifacts");
+      setLoading(false);
+    });
   }, [dataSource, dbName]);
 
   // Pagination logic
@@ -114,7 +104,7 @@ const ArtifactSelect: React.FC<ArtifactSelectProps> = ({
           <List>
             {paginatedArtifacts.map((art) => (
               <ListItemButton
-                key={art.name}
+                key={art.name + (art.object_type ?? "")}
                 selected={value.includes(art.name)}
                 onClick={() => {
                   if (value.includes(art.name)) {
@@ -142,7 +132,12 @@ const ArtifactSelect: React.FC<ArtifactSelectProps> = ({
                 />
                 <ListItemText
                   primary={art.name}
-                  secondary={art.row_count !== undefined ? `Rows: ${art.row_count}` : undefined}
+                  secondary={
+                    (art.object_type
+                      ? `Type: ${art.object_type.charAt(0).toUpperCase() + art.object_type.slice(1)}`
+                      : "Type: Table") +
+                    (art.row_count !== undefined ? ` | Rows: ${art.row_count}` : "")
+                  }
                   primaryTypographyProps={{ fontWeight: 700 }}
                 />
               </ListItemButton>

@@ -36,6 +36,7 @@ export interface Artifact {
   primary_key?: boolean;
   row_count?: number;
   description?: string;
+  object_type?: string;   
   [key: string]: string | number | boolean | string[] | undefined;
 }
 

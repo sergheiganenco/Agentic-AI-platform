@@ -203,63 +203,60 @@ def get_databases_for_source(
 def get_artifacts_for_database(
     ds_id: int,
     db: str = Query(None, description="Schema/database name (ignored for SQLite, required for Mongo)"),
-    artifact_type: str = Query("tables", description="Artifact type: tables, views, procedures, permissions, collections"),
+    artifact_type: str = Query("tables", description="Artifact type(s), e.g. tables,views,procedures,functions,collections"),
     db_session: Session = Depends(get_db)
 ):
     """
     List artifacts (tables/views/procedures/collections) for a given schema/database.
+    Handles multiple comma-separated artifact types, returns all in one response.
     """
     ds = db_session.query(DataSource).filter(DataSource.id == ds_id).first()
     if not ds:
         raise HTTPException(404, "Data source not found.")
 
     norm_type = normalize_type(ds.type)
+    types = [t.strip() for t in artifact_type.split(",") if t.strip()]
+    results = {}
+
     try:
-        if norm_type == "sqlserver":
-            # Azure/SQL Server - single DB, ignore db param, just connect and list
-            from sqlalchemy import create_engine
-            engine = create_engine(ds.connection_string)
-            with engine.connect() as conn:
-                results = scan_artifact(conn, artifact_type)
-            return {artifact_type: results}
-
-        elif norm_type in ("postgresql", "mysql"):
-            # Must have db/schema param
+        if norm_type in ("mongodb", "mongo"):
             if not db:
-                raise HTTPException(400, "Schema/database name is required for this engine.")
-            from sqlalchemy import create_engine
-            engine = create_engine(ds.connection_string)
-            with engine.connect() as conn:
-                results = scan_artifact(conn, artifact_type, schema=db)
-            return {artifact_type: results}
+                raise HTTPException(400, "Database name (`db`) is required for MongoDB artifact scan.")
+            from pymongo import MongoClient
+            client = MongoClient(ds.connection_string)
+            if db not in client.list_database_names():
+                raise HTTPException(400, f"Database '{db}' does not exist in this MongoDB source.")
+            if "collections" in types:
+                results["collections"] = client[db].list_collection_names()
+            # MongoDB supports only collections, skip the rest
+            for t in types:
+                if t != "collections":
+                    results[t] = []
+            return results
 
-        elif norm_type == "sqlite":
-            try:
-                from sqlalchemy import create_engine
-                engine = create_engine(ds.connection_string)
-                with engine.connect() as conn:
-                    results = scan_artifact(conn, artifact_type)
-                return {artifact_type: results}
-            except Exception as e:
-                print(f"[SQLITE SCAN ERROR] {e}")
-                raise HTTPException(400, f"Could not fetch artifacts for SQLite: {e}")
+        # SQL Databases (SQL Server, Postgres, MySQL, SQLite, etc.)
+        from sqlalchemy import create_engine
+        engine = create_engine(ds.connection_string)
+        with engine.connect() as conn:
+            for t in types:
+                try:
+                    if norm_type in ("postgresql", "mysql") and t != "tables":
+                        # Use db/schema parameter for non-default types
+                        artifact_results = scan_artifact(conn, t, schema=db) if db else []
+                    else:
+                        artifact_results = scan_artifact(conn, t)
+                except NotImplementedError:
+                    artifact_results = []
+                except Exception as ex:
+                    logging.warning(f"Failed to scan {t}: {ex}")
+                    artifact_results = []
+                results[t] = artifact_results
+        return results
 
+    except Exception as e:
+        logging.exception(f"Exception in get_artifacts_for_database: {e}")
+        raise HTTPException(400, f"Could not fetch artifacts: {e}")
 
-        elif norm_type in ("mongodb", "mongo"):
-            try:
-                if not db:
-                    raise HTTPException(400, "Database name (`db`) is required for MongoDB artifact scan.")
-                if artifact_type != "collections":
-                    raise HTTPException(400, f"Only 'collections' is supported for MongoDB (got '{artifact_type}').")
-                from pymongo import MongoClient
-                client = MongoClient(ds.connection_string)
-                if db not in client.list_database_names():
-                    raise HTTPException(400, f"Database '{db}' does not exist in this MongoDB source.")
-                collections = client[db].list_collection_names()
-                return {"collections": collections}
-            except Exception as e:
-                print(f"[MONGODB SCAN ERROR] {e}")
-                raise HTTPException(400, f"Could not fetch collections for db '{db}': {e}")
 
 
 
