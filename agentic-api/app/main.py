@@ -1,4 +1,10 @@
 # app/main.py
+import os
+from dotenv import load_dotenv
+
+# Load environment variables early
+load_dotenv()
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -22,11 +28,7 @@ from app.api.routes import source_types
 from app.api.routes import data_sources
 from app.api.routes.scan_api import router as scan_api_router
 from app.api.routes.scan_jobs import router as scan_jobs_router
-
 from app.api.routes import agentic_ai
-
-
-
 
 # Create all tables
 Base.metadata.create_all(bind=engine)
